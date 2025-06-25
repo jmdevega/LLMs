@@ -1,0 +1,68 @@
+# imports
+
+import os
+import requests
+from bs4 import BeautifulSoup
+from IPython.display import Markdown, display
+
+# Constantes
+
+OLLAMA_API = "http://localhost:11434/api/chat"
+HEADERS = {"Content-Type": "application/json"}
+MODEL = "llama3.2"
+
+# Creación de una clase para representar una página web
+
+class Website:
+    """
+    Una clase de utilidad para representar un sitio web que hemos scrappeado
+    """
+
+    def __init__(self, url):
+        """
+        Crea este objeto de sitio web a partir de la URL indicada utilizando la biblioteca BeautifulSoup
+        """
+        self.url = url
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        self.title = soup.title.string if soup.title else "No tiene título"
+        for irrelevant in soup.body(["script", "style", "img", "input"]):
+            irrelevant.decompose()
+        self.text = soup.body.get_text(separator="\n", strip=True)
+
+# Una función que escribe un mensaje de usuario que solicita resúmenes de sitios web:
+
+def user_prompt_for(website):
+    user_prompt = f"Estás viendo un sitio web titulado {website.title}"
+    user_prompt += "\nEl contenido de este sitio web es el siguiente; \
+    proporciona un breve resumen de este sitio web en formato Markdown. \
+    Si incluye noticias, productos o anuncios, resúmelos también.\n\n"
+    user_prompt += website.text
+    return user_prompt
+
+
+# Función para crear el mensaje a pasar al asistente 
+def messages_for(website):
+    return [
+        {"role": "user", "content": user_prompt_for(website)}
+    ]
+
+# Y ahora: llama a la API de Llama3.2
+def summarize(url):
+    website = Website(url)
+    messages = messages_for(website)
+    payload = {
+        "model": MODEL,
+        "messages": messages,
+        "stream": False
+    }
+    response = requests.post(OLLAMA_API, json=payload, headers=HEADERS)
+    return response.json()['message']['content']
+
+# Una función para mostrar esto de forma clara en la salida de Jupyter, usando markdown
+def display_summary(url):
+    summary = summarize(url)
+    display(Markdown(summary))
+
+# Comando para la ejecución del programa
+display_summary("https://www.xataka.com")
